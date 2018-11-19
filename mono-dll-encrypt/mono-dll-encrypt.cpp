@@ -2,7 +2,7 @@
 //
 
 #include "stdafx.h"
-#include "xxtea.h"
+#include "xxtea.c"
 #include <string.h>
 #include <stdio.h>
 #include <direct.h>
