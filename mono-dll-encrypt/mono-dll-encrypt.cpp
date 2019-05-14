@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
 		// 加密文件
 		xxtea_long ret_len = 0;
 		void *encrypt_data = xxtea_encrypt((unsigned char *)buffer, (xxtea_long)len, (unsigned char *)encrypt_key, (xxtea_long)strlen(encrypt_key), &ret_len);
-		if (!encrypt_data)
+		if (!encrypt_data || ret_len <= 0)
 			return -1;
 
 		// 替换路径
@@ -124,7 +124,7 @@ int main(int argc, char* argv[])
         if (!(fp = fopen(decrypt_file.c_str(), "w")))
             return -1;
         
-        fwrite(buffer, 1u, len, fp);
+        fwrite(encrypt_data, 1u, ret_len, fp);
         
         fclose(fp);
 
