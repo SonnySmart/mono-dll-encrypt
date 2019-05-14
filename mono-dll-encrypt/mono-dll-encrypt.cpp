@@ -1,66 +1,73 @@
-// mono-dll-encrypt.cpp : ¶¨Òå¿ØÖÆÌ¨Ó¦ÓÃ³ÌĞòµÄÈë¿Úµã¡£
+// mono-dll-encrypt.cpp : å®šä¹‰æ§åˆ¶å°åº”ç”¨ç¨‹åºçš„å…¥å£ç‚¹ã€‚
 //
 
+#ifdef _WIN32
 #include "stdafx.h"
+#include <Windows.h>
+#else
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif
+
+#include <dirent.h>
 #include "xxtea.c"
 #include <string.h>
 #include <stdio.h>
-#include <direct.h>
-#include <Windows.h>
 #include <iostream>
 #include <cstring>        // for strcpy(), strcat()
-#include <io.h>
 #include <vector>
 #include <fstream>
+#include <stdio.h>
+#include <stdlib.h>
 
-#define MAXPATH  1024 
+#define MAXPATH  512
 
 using namespace std;
 
-//ÊÇ·ñ´æÔÚ
-bool exist(const char * lpPath);
+bool exist(const char *path);
 
-//ÊÇ·ñÊÇÎÄ¼ş¼Ğ #include <Windows.h>
-bool isDir(const char *lpPath);
+bool isDir(const char *name);
 
 void listFiles(const char * dir, vector<string> &file_list);
 
 void string_replace( std::string &strBig, const std::string &strsrc, const std::string &strdst);
 
+void read_buffer(const char *filename, void *&buffer, size_t &len);
+
 int main(int argc, char* argv[])
 {
 	if (argc < 4)
 	{
-		printf("²ÎÊı¸öÊı´íÎó \n");
+		printf("å‚æ•°ä¸ªæ•°é”™è¯¯ \n");
 		return -1;
 	}
 
-	printf("¼ÓÃÜ³ÌĞò = %s \n", *(argv + 0));
-	printf("¼ÓÃÜkey  = %s \n", *(argv + 1));
-	printf("¼ÓÃÜÂ·¾¶ = %s \n", *(argv + 2));
-	printf("Êä³öÂ·¾¶ = %s \n", *(argv + 3));
+	printf("åŠ å¯†ç¨‹åº = %s \n", *(argv + 0));
+	printf("åŠ å¯†key  = %s \n", *(argv + 1));
+	printf("åŠ å¯†è·¯å¾„ = %s \n", *(argv + 2));
+	printf("è¾“å‡ºè·¯å¾„ = %s \n", *(argv + 3));
     
-	xxtea_long data_len;
 	char buffer[MAXPATH] = { 0 }; 
-	const char *cwd = _getcwd(buffer, MAXPATH); 
+	const char *cwd = getcwd(buffer, MAXPATH);
 
 	const char *encrypt_key  = argv[1];
-	string encrypt_path(string(cwd).append("\\").append(argv[2]));
-	string decrypt_path(string(cwd).append("\\").append(argv[3]));
+	string encrypt_path(string(cwd).append("/").append(argv[2]));
+	string decrypt_path(string(cwd).append("/").append(argv[3]));
 
 	vector<string> file_list;
 
-	// Æ´½ÓÈ«Â·¾¶
+	// æ‹¼æ¥å…¨è·¯å¾„
 	printf("%s \n",encrypt_path.c_str());
 	
-	// ÅĞ¶ÏÎÄ¼şÊÇ·ñ´æÔÚ
+	// åˆ¤æ–­æ–‡ä»¶æ˜¯å¦å­˜åœ¨
 	if (!exist(encrypt_path.c_str()))
 	{
-		printf("ÎÄ¼ş²»´æÔÚ \n");
+		printf("æ–‡ä»¶ä¸å­˜åœ¨ \n");
 		return -1;
 	}
 
-	// Ìí¼ÓÎÄ¼şÂ·¾¶µ½ÁĞ±í
+	// æ·»åŠ æ–‡ä»¶è·¯å¾„åˆ°åˆ—è¡¨
 	if (isDir(encrypt_path.c_str()))
 	{
 		listFiles(encrypt_path.c_str(), file_list);
@@ -70,13 +77,13 @@ int main(int argc, char* argv[])
 		file_list.push_back(encrypt_path);
 	}
 
-	// ÅĞ¶ÏÎª¿ÕÎÄ¼ş¼ĞÍË³ö
+	// åˆ¤æ–­ä¸ºç©ºæ–‡ä»¶å¤¹é€€å‡º
 	if (file_list.empty())
 		return -1;
 
 	size_t encrypt_count(0);
 
-	// ±éÀúÎÄ¼ş¼Ğ
+	// éå†æ–‡ä»¶å¤¹
 	for(size_t i = 0; i < file_list.size(); i++)
 	{
 		string encrypt_file(file_list.at(i));
@@ -84,97 +91,90 @@ int main(int argc, char* argv[])
 		if (!exist(encrypt_file.c_str()))
 			continue;
 
-		// ´ò¿ªÎÄ¼ş
-		fstream fs(file_list.at(i), ios::in | ios::binary);
-		if (!fs.is_open())
-			return -1;
+		// æ‰“å¼€æ–‡ä»¶
+        void *buffer = NULL;
+        size_t len = 0;
+        read_buffer(encrypt_file.c_str(), buffer, len);
+        
+        if (!buffer)
+            continue;
 
-		fs.seekg(0, fs.end);
-		data_len = fs.tellg();
-
-		void *data = malloc(data_len);
-
-		// ¶ÁÈ¡ÎÄ¼ş
-		fs.seekg(0, fs.beg);
-		if (fs.read((char *)data, data_len) < 0)
-		{
-			printf("fread error \n");
-			return -1;
-		}
-
-		// ¼ÓÃÜÎÄ¼ş
-		xxtea_long ret_len;
-		void *encrypt_data = xxtea_encrypt((unsigned char *)data, data_len, (unsigned char *)encrypt_key, (xxtea_long)strlen(encrypt_key), &ret_len);
+		// åŠ å¯†æ–‡ä»¶
+		xxtea_long ret_len = 0;
+		void *encrypt_data = xxtea_encrypt((unsigned char *)buffer, (xxtea_long)len, (unsigned char *)encrypt_key, (xxtea_long)strlen(encrypt_key), &ret_len);
 		if (!encrypt_data)
 			return -1;
 
-		// base64
-		//char * base64_data = base64_encode((const unsigned char *)encrypt_data, len);
-		// Ìæ»»Â·¾¶
+		// æ›¿æ¢è·¯å¾„
 		string_replace(encrypt_file, encrypt_path, decrypt_path);
 		string decrypt_file(encrypt_file);
-		string parent_dir = decrypt_file.substr(0, decrypt_file.rfind("\\"));
+		string parent_dir = decrypt_file.substr(0, decrypt_file.rfind("/"));
 
 		if (!exist(parent_dir.c_str()))
-			system(string("md ").append(parent_dir).c_str());
+        {
+#ifdef _WIN32
+            system(string("md ").append(parent_dir).c_str());
+#else
+            system(string("mkdir ").append(parent_dir).c_str());
+#endif
+        }
 
-		fstream fp(decrypt_file, ios::out | ios::binary);
-		if (!fp.is_open())
-			return -1;
+		// å†™å…¥æ–‡ä»¶
+        FILE *fp = NULL;
+        if (!(fp = fopen(decrypt_file.c_str(), "w")))
+            return -1;
+        
+        fwrite(buffer, 1u, len, fp);
+        
+        fclose(fp);
 
-		// Ğ´ÈëÎÄ¼ş
-		fp.seekp(0, fp.beg);
-		if (fp.write((const char *)encrypt_data, ret_len) < 0)
-		{
-			printf("fwrite error \n");
-			return -1;
-		}
-
-		printf("%s ¼ÓÃÜ³É¹¦\n",decrypt_file.c_str());
+		printf("%s åŠ å¯†æˆåŠŸ\n",decrypt_file.c_str());
 
 		free(encrypt_data);
-		free(data);
-		fs.close();
-		fp.close();
+		free(buffer);
 
 		++encrypt_count;
 	}
 
 	if (encrypt_count == file_list.size())
-		printf("¼ÓÃÜÍê³É \n");
+		printf("åŠ å¯†å®Œæˆ \n");
 
 	return 0;
 }
 
-//ÊÇ·ñ´æÔÚ
-bool exist(const char * lpPath)
+//æ˜¯å¦å­˜åœ¨
+bool exist(const char* path)
 {
-	/* Check for existence */
-	if( (_access( lpPath, 0 )) != -1 )
-	{
-		return true;
-	}else{
-		return false;
-	}
+    return ( (access( path, 0 )) != -1 );
 }
 
-//ÊÇ·ñÊÇÎÄ¼ş¼Ğ #include <Windows.h>
-bool isDir(const char *lpPath)
+bool isDir(const char *name)
 {
-	return GetFileAttributesA(lpPath)&FILE_ATTRIBUTE_DIRECTORY;
+#ifdef _WIN32
+	return GetFileAttributesA(name)&FILE_ATTRIBUTE_DIRECTORY;
+#else
+    struct stat stbuf;
+    
+    if(stat(name, &stbuf) == -1){
+        return false;
+    }
+    
+    return ((stbuf.st_mode & S_IFMT) == S_IFDIR);
+#endif
 }
 
 void listFiles(const char * dir, vector<string> &file_list)
 {
+#ifdef _WIN32
 	char dirNew[200];
 	strcpy(dirNew, dir);
-	strcat(dirNew, "\\*.*");    // ÔÚÄ¿Â¼ºóÃæ¼ÓÉÏ"\\*.*"½øĞĞµÚÒ»´ÎËÑË÷
+	strcat(dirNew, "\\*.*");    // åœ¨ç›®å½•åé¢åŠ ä¸Š"\\*.*"è¿›è¡Œç¬¬ä¸€æ¬¡æœç´¢
 
 	intptr_t handle;
 	_finddata_t findData;
 
 	handle = _findfirst(dirNew, &findData);
-	if (handle == -1)        // ¼ì²éÊÇ·ñ³É¹¦
+	if (handle == -1)        // æ£€æŸ¥æ˜¯å¦æˆåŠŸ
 		return;
 
 	do
@@ -186,7 +186,7 @@ void listFiles(const char * dir, vector<string> &file_list)
 
 			//cout << findData.name << "\t<dir>\n";
 
-			// ÔÚÄ¿Â¼ºóÃæ¼ÓÉÏ"\\"ºÍËÑË÷µ½µÄÄ¿Â¼Ãû½øĞĞÏÂÒ»´ÎËÑË÷
+			// åœ¨ç›®å½•åé¢åŠ ä¸Š"\\"å’Œæœç´¢åˆ°çš„ç›®å½•åè¿›è¡Œä¸‹ä¸€æ¬¡æœç´¢
 			strcpy(dirNew, dir);
 			strcat(dirNew, "\\");
 			strcat(dirNew, findData.name);
@@ -201,7 +201,30 @@ void listFiles(const char * dir, vector<string> &file_list)
 		}
 	} while (_findnext(handle, &findData) == 0);
 
-	_findclose(handle);    // ¹Ø±ÕËÑË÷¾ä±ú
+	_findclose(handle);    // å…³é—­æœç´¢å¥æŸ„
+#else
+    char name[MAXPATH];
+    struct dirent *dp;
+    DIR *dfd;
+    
+    if((dfd = opendir(dir)) == NULL){
+        fprintf(stderr, "dirwalk: can't open %s\n", dir);
+        return;
+    }
+    
+    while((dp = readdir(dfd)) != NULL){ //è¯»ç›®å½•è®°å½•é¡¹
+        if(strcmp(dp->d_name, ".") == 0 || strcmp(dp -> d_name, "..") == 0){
+            continue;  //è·³è¿‡å½“å‰ç›®å½•ä»¥åŠçˆ¶ç›®å½•
+        }
+        
+        sprintf(name, "%s/%s", dir, dp->d_name);
+        
+        if (isDir(name))
+            listFiles(name, file_list);
+        else
+            file_list.push_back(name);
+    }
+#endif
 }
 
 void string_replace( std::string &strBig, const std::string &strsrc, const std::string &strdst)
@@ -215,5 +238,35 @@ void string_replace( std::string &strBig, const std::string &strsrc, const std::
 		strBig.replace( pos, srclen, strdst );
 		pos += dstlen;
 	}
+}
+
+void read_buffer(const char *filename, void *&buffer, size_t &len)
+{
+    if (!exist(filename))
+        return;
+    
+    FILE *fp = NULL;
+    if (!(fp = fopen(filename, "r")))
+        return;
+    
+    fseek(fp, 0, SEEK_END);
+    len = ftell(fp);
+    if (len <= 0)
+    {
+        fclose(fp);
+        return;
+    }
+    
+    fseek(fp, 0, SEEK_SET);
+    void *buff = malloc(len);
+    if (fread(buff, 1u, len, fp) <= 0)
+    {
+        fclose(fp);
+        return;
+    }
+    
+    buffer = buff;
+    
+    fclose(fp);
 }
 
